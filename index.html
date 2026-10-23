@@ -134,17 +134,14 @@ async function sendBarcode(code) {
   status("Barcode topildi: " + code);
 
   if (window.opener && !window.opener.closed) {
-    try {
-      const target = new URL(document.referrer);
-      window.opener.postMessage(
-        { type: "barcode-scanned", barcode: code },
-        target.origin
-      );
-      status("Barcode savdo tizimiga yuborildi: " + code);
-      return;
-    } catch (e) {
-      // Quyida barcode’ni qo‘lda olish imkoniyati qoladi.
-    }
+  window.opener.postMessage(
+    { type: "barcode-scanned", barcode: code },
+    "*"
+  );
+
+  status("Barcode savdo tizimiga yuborildi: " + code);
+  return;
+}
   }
 
   document.getElementById("result").innerHTML = "";
