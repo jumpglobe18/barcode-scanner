@@ -1,11 +1,13 @@
-
+```html
 <!DOCTYPE html>
 <html lang="uz">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Barcode skaner</title>
+
   <script src="https://unpkg.com/html5-qrcode"></script>
+
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -14,13 +16,16 @@
       text-align: center;
       background: #f5f5f5;
     }
+
     main {
       max-width: 440px;
       margin: auto;
       background: white;
       padding: 18px;
       border-radius: 14px;
+      box-sizing: border-box;
     }
+
     button {
       width: 100%;
       padding: 14px;
@@ -30,28 +35,45 @@
       border-radius: 8px;
       background: #1769aa;
       color: white;
+      cursor: pointer;
     }
+
+    button:disabled {
+      opacity: 0.6;
+    }
+
     #reader {
       width: 100%;
       margin-top: 15px;
     }
+
     #status {
       overflow-wrap: anywhere;
     }
   </style>
 </head>
+
 <body>
 <main>
   <h2>📷 Barcode skaner</h2>
   <p>Orqa kamerani yoqing va mahsulot shtrix-kodini ko‘rsating.</p>
-  <button id="start" onclick="startScanner()">Kamerani yoqish</button>
-  <button id="stop" onclick="stopScanner()">To‘xtatish</button>
+
+  <button id="start" type="button" onclick="startScanner()">
+    Kamerani yoqish
+  </button>
+
+  <button id="stop" type="button" onclick="stopScanner()">
+    To‘xtatish
+  </button>
+
   <div id="reader"></div>
   <p id="status">Kamera ishga tushirishga tayyor.</p>
   <div id="result"></div>
 </main>
 
 <script>
+"use strict";
+
 let scanner = null;
 let busy = false;
 let finished = false;
@@ -61,10 +83,13 @@ function status(text) {
 }
 
 async function startScanner() {
-  if (busy) return;
+  if (busy) {
+    status("Skaner allaqachon ishlayapti.");
+    return;
+  }
 
   if (!window.isSecureContext) {
-    status("XATO: Sahifa HTTPS orqali ochilishi kerak.");
+    status("XATO: Sahifani HTTPS orqali oching.");
     return;
   }
 
@@ -75,93 +100,126 @@ async function startScanner() {
 
   busy = true;
   finished = false;
-  document.getElementById("result").textContent = "";
+
+  document.getElementById("start").disabled = true;
+  document.getElementById("result").replaceChildren();
   status("Kamera ishga tushirilmoqda...");
 
   try {
     scanner = new Html5Qrcode("reader");
+
+    const formats = [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.ITF
+    ];
 
     await scanner.start(
       { facingMode: "environment" },
       {
         fps: 10,
         qrbox: { width: 280, height: 140 },
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.ITF
-        ]
+        formatsToSupport: formats
       },
-      (code) => {
+      function(decodedText) {
         if (finished) return;
+
         finished = true;
-        status("Topildi: " + code);
-        sendBarcode(code);
+        sendBarcode(decodedText);
       },
-      () => {}
+      function() {
+        // Barcode topilmaguncha keladigan xabarlarni e'tiborsiz qoldiramiz.
+      }
     );
 
     status("Kamera ishlayapti. Barcode’ni ko‘rsating.");
-  } catch (e) {
+
+  } catch (error) {
+    scanner = null;
     busy = false;
-    status("KAMERA XATOSI: " + (e.message || e));
+    document.getElementById("start").disabled = false;
+
+    status(
+      "KAMERA XATOSI: " +
+      (error && error.message ? error.message : String(error))
+    );
   }
 }
 
 async function stopScanner() {
-  try {
-    if (scanner && scanner.isScanning) {
-      await scanner.stop();
-    }
-    if (scanner) {
-      await scanner.clear();
-    }
-  } catch (e) {
-    // Kamera to‘xtatilganda xato bo‘lsa, sahifa ishlashda davom etadi.
-  }
+  const currentScanner = scanner;
 
   scanner = null;
   busy = false;
-  status("Skaner to‘xtatildi.");
+
+  try {
+    if (currentScanner && currentScanner.isScanning) {
+      await currentScanner.stop();
+    }
+  } catch (error) {
+    console.log("Kamerani to‘xtatish:", error);
+  }
+
+  try {
+    if (currentScanner) {
+      currentScanner.clear();
+    }
+  } catch (error) {
+    console.log("Skanerni tozalash:", error);
+  }
+
+  document.getElementById("start").disabled = false;
 }
 
 async function sendBarcode(code) {
-  await stopScanner();
   status("Barcode topildi: " + code);
 
-  if (window.opener && !window.opener.closed) {
-  window.opener.postMessage(
-    { type: "barcode-scanned", barcode: code },
-    "*"
-  );
+  await stopScanner();
 
-  status("Barcode savdo tizimiga yuborildi: " + code);
-  return;
-}
+  if (window.opener && !window.opener.closed) {
+    window.opener.postMessage(
+      {
+        type: "barcode-scanned",
+        barcode: code
+      },
+      "https://script.google.com"
+    );
+
+    status("Barcode savdo tizimiga yuborildi: " + code);
+
+    setTimeout(function() {
+      window.close();
+    }, 700);
+
+    return;
   }
 
-  document.getElementById("result").innerHTML = "";
+  document.getElementById("result").replaceChildren();
 
   const output = document.createElement("p");
   output.textContent = "Barcode: " + code;
   document.getElementById("result").appendChild(output);
 
   const copy = document.createElement("button");
+  copy.type = "button";
   copy.textContent = "Barcode’ni nusxalash";
-  copy.onclick = async () => {
+
+  copy.onclick = async function() {
     try {
       await navigator.clipboard.writeText(code);
       status("Barcode nusxalandi: " + code);
-    } catch (e) {
+    } catch (error) {
       status("Barcode: " + code);
     }
   };
+
   document.getElementById("result").appendChild(copy);
 }
 </script>
 </body>
 </html>
+```
